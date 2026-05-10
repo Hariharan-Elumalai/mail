@@ -39,6 +39,13 @@ app.use((err, _req, res, _next) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () =>
-  console.log(`🚀 Server running on http://localhost:${PORT}`)
-);
+
+// Export the app for serverless platforms (Vercel) and testing.
+module.exports = app;
+
+// Only start the HTTP server when this file is run directly (not required as a module).
+if (require.main === module) {
+  app.listen(PORT, () =>
+    console.log(`🚀 Server running on http://localhost:${PORT}`)
+  );
+}
