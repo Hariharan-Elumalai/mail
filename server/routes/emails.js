@@ -4,15 +4,32 @@ const nodemailer = require('nodemailer');
 const Email = require('../models/Email');
 const { protect } = require('../middleware/auth');
 
-// Create transporter
-const createTransporter = () =>
-  nodemailer.createTransport({
-    service: 'gmail',
+// Create transporter. If SMTP creds are not provided, create an Ethereal test account
+// and return a transporter that allows previewing messages instead of sending real mail.
+const createTransporter = async () => {
+  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+    return { transporter: nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    }), isTest: false };
+  }
+
+  // Create test account
+  const testAccount = await nodemailer.createTestAccount();
+  const transporter = nodemailer.createTransport({
+    host: 'smtp.ethereal.email',
+    port: 587,
+    secure: false,
     auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
+      user: testAccount.user,
+      pass: testAccount.pass,
     },
   });
+  return { transporter, isTest: true };
+};
 
 // @route POST /api/emails/send  (protected)
 router.post('/send', protect, async (req, res) => {
@@ -37,19 +54,27 @@ router.post('/send', protect, async (req, res) => {
       status: 'pending',
     });
 
-    const transporter = createTransporter();
+    const { transporter, isTest } = await createTransporter();
     const successList = [];
     const failList = [];
+    const previews = [];
 
     // Send to each recipient
     for (const recipient of recipients) {
       try {
-        await transporter.sendMail({
-          from: `"BulkMailer" <${process.env.EMAIL_USER}>`,
+        const info = await transporter.sendMail({
+          from: `"BulkMailer" <${process.env.EMAIL_USER || 'no-reply@bulkmailer.test'}>`,
           to: recipient.trim(),
           subject,
           html: body,
         });
+
+        // If using Ethereal, collect preview URL
+        if (isTest) {
+          const url = nodemailer.getTestMessageUrl(info);
+          if (url) previews.push({ recipient: recipient.trim(), preview: url });
+        }
+
         successList.push(recipient);
       } catch (err) {
         console.error(`Failed to send to ${recipient}: ${err.message}`);
@@ -70,14 +95,18 @@ router.post('/send', protect, async (req, res) => {
     emailRecord.sentAt = new Date();
     await emailRecord.save();
 
-    res.json({
+    const resp = {
       message: `Emails processed. ${successList.length} sent, ${failList.length} failed.`,
       status,
       successCount: successList.length,
       failCount: failList.length,
       failedEmails: failList,
       emailId: emailRecord._id,
-    });
+    };
+
+    if (previews.length > 0) resp.previews = previews;
+
+    res.json(resp);
   } catch (err) {
     console.error('Send email error:', err);
     res.status(500).json({ message: err.message });

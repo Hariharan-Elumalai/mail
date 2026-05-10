@@ -7,8 +7,8 @@ const emailRoutes = require('./routes/emails');
 
 const app = express();
 
-// Connect to MongoDB
-connectDB();
+// Note: DB connection is performed by the runtime that starts the server.
+// For local runs (when started directly) we connect and seed a demo user.
 
 // Middleware
 app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:3000', credentials: true }));
@@ -43,9 +43,25 @@ const PORT = process.env.PORT || 5000;
 // Export the app for serverless platforms (Vercel) and testing.
 module.exports = app;
 
-// Only start the HTTP server when this file is run directly (not required as a module).
 if (require.main === module) {
-  app.listen(PORT, () =>
-    console.log(`🚀 Server running on http://localhost:${PORT}`)
-  );
+  // Running locally — connect to DB and seed demo user if applicable.
+  (async () => {
+    try {
+      await connectDB();
+      // Seed demo user if available
+      try {
+        const { seedDemoUser } = require('./utils/seedDemo');
+        await seedDemoUser();
+      } catch (err) {
+        // ignore seeding errors
+        console.warn('Demo seeding skipped:', err.message || err);
+      }
+
+      app.listen(PORT, () =>
+        console.log(`🚀 Server running on http://localhost:${PORT}`)
+      );
+    } catch (err) {
+      console.error('Failed to connect to DB on startup:', err.message || err);
+    }
+  })();
 }
