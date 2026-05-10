@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const Register = () => {
@@ -62,7 +62,7 @@ const Register = () => {
 
         <p className="auth-switch">
           Already have an account?{' '}
-          <a onClick={() => navigate('/login')}>Sign in</a>
+          <Link to="/login">Sign in</Link>
         </p>
       </div>
     </div>
